@@ -34,7 +34,10 @@
             <tbody>
                 <tr v-for="(index, entry) in dataList | filterBy searchKey">
                     <td v-for="col in columns">
-                        {{entry[col.name]}}
+                        <span v-if="col.isKey">
+                            <a href="javascript:void(0)" @click="openEditItemDialog(entry[col.name])">{{entry[col.name]}}</a>
+                        </span>
+                        <span v-else>{{entry[col.name]}}</span>
                     </td>
                     <td class="text-center">
                         <button class="btn-danger" @click="deleteItem(entry)">delete</button>
@@ -49,7 +52,7 @@
         </div>
 
         <!--//dialog-->
-        <modal-dialog :mode="mode" :title="title" :fields="columns" :item="item">
+        <modal-dialog :mode="mode" :title="title" :item="item" :fields="columns" v-on:create-item="createItem" v-on:update-item="updateItem">
         </modal-dialog>
     </template>
 
@@ -97,6 +100,14 @@
                     item:{}
                 }
             },
+            ready: function() {
+                for(var i = 0; i < this.columns.length; i++){
+                    if (this.columns[i].isKey) {
+                        this.keyColumn = this.columns[i]['name'];
+                        break;
+                    }
+                }
+            },
             methods: {
                 deleteItem: function (entry) {
                     var data = this.dataList;
@@ -112,8 +123,71 @@
                     this.mode = 1;
                     this.item = {};
                     this.$broadcast('showDialog', true);
+                },
+                openEditItemDialog: function (key) {
+                    //根据主键查找当前修改的数据
+                    var currentItem = this.findItemByKey(key);
+                    this.title = 'Edit Item - ' + key;
+                    this.mode= 2;
+                    this.item = this.initItemForUpdate(currentItem);
+                    this.$broadcast('showDialog', true);
+                },
+                initItemForUpdate: function(p, c) {
+                    c = c || {};
+                    for (var i in p) {
+                        //属性i 是否为p对象自有属性
+                        if (p.hasOwnProperty(i)) {
+                            if (typeof p[i] === 'object') {
+                                c[i] = Array.isArray(p[i]) ? [] : {};
+                                this.initItemForUpdate(p[i], c[i]);
+                            } else {
+                                c[i] = p[i];
+                            }
+                        }
+                    }
+                    return c;
+                },
+                findItemByKey: function (key) {
+                    var keyColumn = this.keyColumn;
+                    for (var i = 0; i < this.dataList.length; i++){
+                        if (this.dataList[i][keyColumn] === key) {
+                            return this.dataList[i];
+                        }
+                    }
+                },
+                itemExists: function () {
+                    var keyColumn = this.keyColumn;
+                    for (var i = 0; i < this.dataList.length; i++){
+                        if (this.item[keyColumn] === this.dataList[i][keyColumn]) {
+                            return true;
+                        }
+                        return false;
+                    }
+                },
+                createItem: function () {
+                    var keyColumn = this.keyColumn;
+                    if (!this.itemExists()) {
+                        this.dataList.push(this.item);
+                        this.$broadcast('showDialog', false);
+                        this.item = {};
+                    } else {
+                        alert(keyColumn + '"' + this.item[keyColumn] + '"is already exists');
+                    }
+                },
+                updateItem: function () {
+                    var keyColumn = this.keyColumn;
+                    for (var i = 0; i < this.dataList.length; i++) {
+                        if (this.dataList[i][keyColumn] === this.item[keyColumn]) {
+                            for (var j in this.item) {
+                                this.dataList[i][j] = this.item[j];
+                            }
+                            break;
+                        }
+                    }
+                    this.$broadcast('showDialog', false);
                 }
             },
+
             components: {
                 'modal-dialog': {
                     template: '#dialog-template',
@@ -129,7 +203,13 @@
                             this.show = false;
                         },
                         save: function () {
-                            
+                            if (this.mode === 1) {
+                                // 使用$dispatch调用simple-grid的create-item事件
+                                this.$dispatch('create-item')
+                            } else if (this.mode === 2) {
+                                // 使用$dispatch调用simple-grid的update-item事件
+                                this.$dispatch('update-item')
+                            }
                         }
                     },
                     events: {
