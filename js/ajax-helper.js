@@ -6,6 +6,7 @@ function AjaxHelper() {
             dataType: dataType,
             data: data,
             success: callback,
+            contentType: 'application/json;charset=utf-8',
             error: function(xhr, errorType, error) {
                 alert('Ajax request error, errorType: ' + errorType +  ', error: ' + error)
             }

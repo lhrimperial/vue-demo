@@ -33,7 +33,7 @@
             <tbody>
                 <tr v-for="entry in dataList |filterBy searchKey">
                     <td v-for="col in columns">
-                        <span v-if="$index == 1">
+                        <span v-if="$index == 0">
                             <a href="javascript:void(0)" @click="openEditItemDialog(entry[col])">{{entry[col]}}</a>
                         </span>
                         <span v-else>{{entry[col]}}</span>
@@ -44,21 +44,67 @@
                 </tr>
             </tbody>
         </table>
+
+        <div class="container">
+            <button @click="openNewItemDialog('Create New Item')">Create</button>
+        </div>
+        <dialog :mode="mode" :title="title" :item="item" :fields="columns" @create-item="createItem" @update-item="updateItem">
+
+        </dialog>
     </template>
 
     <template id="dialog-template">
-
+        <div class="dialogs">
+            <div class="dialog" :class="{'dialog-active':show}">
+                <div class="dialog-content">
+                    <header class="dialog-header">
+                        <h1 class="dialog-title">{{title}}</h1>
+                    </header>
+                    <div class="dialog-body">
+                        <div v-for="field in fields" class="form-group">
+                            <label>{{field}}</label>
+                            <input type="text" v-model="item[field]">
+                        </div>
+                    </div>
+                    <footer class="dialog-footer">
+                        <div class="form-group">
+                            <label></label>
+                            <button class="btn-save" @click="save">Save</button>
+                            <button class="btn-close" @click="close">Close</button>
+                        </div>
+                    </footer>
+                </div>
+            </div>
+        </div>
     </template>
 
     <script src="../../js/vue.js"></script>
     <script src="../../js/jquery-1.10.2.min.js"></script>
-    <script src="../../js/ajax-helper.js"></script>
+    <script src="../../js/ajax-helper.js?version=0.0.0.0"></script>
     <script>
         var dialogTemplate = Vue.extend({
-            template: 'dialog-template',
+            template: '#dialog-template',
+            props:['mode','title','item','fields'],
             data: function () {
                 return {
                     show: false
+                }
+            },
+            methods: {
+                save: function () {
+                    if (this.mode === 1) {
+                        this.$dispatch('create-item');
+                    } else if (this.mode === 2) {
+                        this.$dispatch('update-item');
+                    }
+                },
+                close: function () {
+                    this.show = false;
+                }
+            },
+            events: {
+                'showDialog': function (show) {
+                    this.show = show;
                 }
             }
         })
@@ -68,12 +114,75 @@
             props:['dataList','columns','searchKey'],
             data: function() {
                 return {
-
+                    mode: 0,
+                    title: '',
+                    item: {}
                 }
             },
             methods: {
+                openNewItemDialog: function (title) {
+                    this.title = title;
+                    this.mode = 1;
+                    this.item = {};
+                    this.$broadcast('showDialog', true);
+                },
+                findItemByUserId: function (userId) {
+                    for (var i = 0; i < this.dataList.length; i++){
+                        if (this.dataList[i].userId === userId) {
+                            return this.dataList[i];
+                        }
+                    }
+                },
                 openEditItemDialog: function (userId) {
-
+                    this.title = 'Edit Item ' + userId;
+                    this.mode = 2;
+                    this.item = this.findItemByUserId(userId);
+                    this.$broadcast('showDialog', true);
+                },
+                itemExists: function () {
+                    for (var i = 0; i < this.dataList.length; i++){
+                        if (this.item.userId === this.dataList[i].userId) {
+                            return true;
+                        }
+                    }
+                    return false;
+                },
+                createItem: function () {
+                    var me = this;
+                    if (this.itemExists()) {
+                        alert(this.item.userId + ' is already exists');
+                    } else {
+                        var callback = function (response) {
+                            if (response.success) {
+                                me.dataList.push(me.item);
+                                me.$broadcast('showDialog', false);
+                                me.item = {};
+                            } else {
+                                alert(response.resMsg);
+                            }
+                        };
+                        var user = this.item;
+                        ajaxHelper.post(vue.apiUrl + '/save', JSON.stringify(user), callback);
+                    }
+                },
+                updateItem: function () {
+                    var me = this;
+                    var callback = function (response) {
+                        if (response.success) {
+                            for(var i = 0; i < me.dataList.length; i++){
+                                if (me.dataList[i].userId === me.item.userId) {
+                                    for (var j in me.item){
+                                        me.dataList[i][j] = me.item[j];
+                                    }
+                                    break;
+                                }
+                            }
+                            me.$broadcast('showDialog', false);
+                        } else {
+                            alert(response.resMsg);
+                        }
+                    }
+                    ajaxHelper.post(vue.apiUrl + '/update', JSON.stringify(this.item), callback);
                 },
                 deleteItem: function (userId) {
                     var callback = function (response) {
